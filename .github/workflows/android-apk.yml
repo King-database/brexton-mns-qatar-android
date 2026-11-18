@@ -7,13 +7,16 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   build:
-    name: Build Android APK
+    name: Build BREXTON MnS Qatar
     runs-on: ubuntu-latest
 
     steps:
-      - name: Get repository files
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Java
@@ -27,54 +30,78 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Extract uploaded ZIP
+      - name: Find and extract project ZIP
+        shell: bash
         run: |
           mkdir -p app-source
-          ZIP_FILE=$(find . -maxdepth 2 -type f -iname "*.zip" | head -n 1)
+          ZIP_FILE=$(find . -maxdepth 3 -type f -iname "*.zip" | head -n 1)
+
           if [ -z "$ZIP_FILE" ]; then
-            echo "No ZIP file found in repository."
+            echo "ERROR: No ZIP file found."
             exit 1
           fi
-          unzip -q "$ZIP_FILE" -d app-source
-          echo "Extracted $ZIP_FILE"
-          find app-source -maxdepth 3 -type f | head -n 80
 
-      - name: Locate Android project
+          echo "Extracting: $ZIP_FILE"
+          unzip -q "$ZIP_FILE" -d app-source
+
+          echo "Extracted project files:"
+          find app-source -maxdepth 3 -type f | head -n 100
+
+      - name: Locate Capacitor project
+        shell: bash
         run: |
+          PROJECT_DIR=""
+
           if [ -f app-source/package.json ]; then
             PROJECT_DIR="app-source"
           else
-            PROJECT_DIR=$(find app-source -name package.json -not -path "*/node_modules/*" -printf '%h\n' | head -n 1)
+            PROJECT_DIR=$(find app-source -name package.json \
+              -not -path "*/node_modules/*" \
+              -printf '%h\n' | head -n 1)
           fi
+
           if [ -z "$PROJECT_DIR" ]; then
-            echo "Could not find package.json in ZIP."
+            echo "ERROR: package.json not found in ZIP."
             exit 1
           fi
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-            - name: Install dependencies
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Found project: $PROJECT_DIR"
+
+      - name: Install project dependencies
         run: |
           cd "$PROJECT_DIR"
           npm install
           npm install --save-dev typescript
 
-      - name: Prepare Android project
+      - name: Verify Capacitor configuration
         run: |
           cd "$PROJECT_DIR"
+          if [ ! -f capacitor.config.ts ] && [ ! -f capacitor.config.json ]; then
+            echo "ERROR: Capacitor configuration not found."
+            exit 1
+          fi
+
+      - name: Prepare Android platform
+        run: |
+          cd "$PROJECT_DIR"
+
           if [ ! -d android ]; then
             npx cap add android
           fi
+
           npx cap sync android
 
-      - name: Build APK
+      - name: Build debug APK
         run: |
           cd "$PROJECT_DIR/android"
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: brexton-mns-qatar-android-apk
           path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          retention-days: 14
