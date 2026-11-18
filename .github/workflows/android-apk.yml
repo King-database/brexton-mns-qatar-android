@@ -30,28 +30,22 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Find and extract project ZIP
+      - name: Extract project ZIP
         shell: bash
         run: |
           mkdir -p app-source
           ZIP_FILE=$(find . -maxdepth 3 -type f -iname "*.zip" | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: No ZIP file found."
+            echo "ERROR: Project ZIP not found."
             exit 1
           fi
 
-          echo "Extracting: $ZIP_FILE"
           unzip -q "$ZIP_FILE" -d app-source
 
-          echo "Extracted project files:"
-          find app-source -maxdepth 3 -type f | head -n 100
-
-      - name: Locate Capacitor project
+      - name: Locate project
         shell: bash
         run: |
-          PROJECT_DIR=""
-
           if [ -f app-source/package.json ]; then
             PROJECT_DIR="app-source"
           else
@@ -61,47 +55,46 @@ jobs:
           fi
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: package.json not found in ZIP."
+            echo "ERROR: package.json not found."
             exit 1
           fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Found project: $PROJECT_DIR"
+          echo "Project directory: $PROJECT_DIR"
 
-      - name: Install project dependencies
+      - name: Install dependencies
         run: |
           cd "$PROJECT_DIR"
           npm install
-          npm install --save-dev typescript
+          npm install --save-dev typescript@5.8.3
+
+      - name: Verify TypeScript
+        run: |
+          cd "$PROJECT_DIR"
+          npx tsc --version
 
       - name: Verify Capacitor configuration
         run: |
           cd "$PROJECT_DIR"
-          if [ ! -f capacitor.config.ts ] && [ ! -f capacitor.config.json ]; then
-            echo "ERROR: Capacitor configuration not found."
-            exit 1
-          fi
+          test -f capacitor.config.ts || test -f capacitor.config.json
 
-      - name: Prepare Android platform
+      - name: Prepare Android
         run: |
           cd "$PROJECT_DIR"
-
-          if [ ! -d android ]; then
-            npx cap add android
-          fi
-
+          npx cap add android
           npx cap sync android
 
-      - name: Build debug APK
+      - name: Build APK
         run: |
           cd "$PROJECT_DIR/android"
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: brexton-mns-qatar-android-apk
           path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+          
