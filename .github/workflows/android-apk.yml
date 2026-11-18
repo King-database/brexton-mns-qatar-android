@@ -52,10 +52,11 @@ jobs:
           fi
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Install dependencies
+            - name: Install dependencies
         run: |
           cd "$PROJECT_DIR"
           npm install
+          npm install --save-dev typescript
 
       - name: Prepare Android project
         run: |
